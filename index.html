@@ -15,36 +15,36 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState } = React;
+        const { useState, useEffect } = React;
 
-        const EMPLOYEES_BY_COMPANY = {
-            "Кедресс": [
-                "Дмитриев А.Н.",
-                "Долматов Ю. М.",
-                "Кузина Е. А.",
-                "Матвиенко Е.В.",
-                "Прокофьева Н.В.",
-                "Силин А. И."
-            ],
-            "ПЛ ГРУПП": [
-                "Анохин В.М.",
-                "Горбунов В. С.",
-                "Долматов Ю. М.",
-                "Кочетков А. С.",
-                "Мезен Т.В.",
-                "Чинцов Ю. А.",
-                "Шепилов А.Н."
-            ]
+        // БАЗА ДАННЫХ СОТРУДНИКОВ (Логины и пароли)
+        // Вы можете поменять пароли (password) на любые другие
+        const USERS = {
+            "dmitriev": { password: "DAN", name: "Дмитриев А.Н.", companies: ["Kedress"] },
+            "kuzina": { password: "KEA", name: "Кузина Е. А.", companies: ["Kedress"] },
+            "matvienko": { password: "MEV", name: "Матвиенко Е.В.", companies: ["Kedress"] },
+            "prokofieva": { password: "PNV", name: "Прокофьева Н.В.", companies: ["Kedress"] },
+            "silin": { password: "SAI", name: "Силин А. И.", companies: ["Kedress"] },
+            
+            // Долматов работает в двух компаниях
+            "dolmatov": { password: "DYM", name: "Долматов Ю. М.", companies: ["Kedress", "Палладиум"] },
+
+            "anohin": { password: "AVM", name: "Анохин В.М.", companies: ["Палладиум"] },
+            "gorbunov": { password: "GVS", name: "Горбунов В. С.", companies: ["Палладиум"] },
+            "kochetkov": { password: "KAS", name: "Кочетков А. С.", companies: ["Палладиум"] },
+            "mezen": { password: "MTV", name: "Мезен Т.В.", companies: ["Палладиум"] },
+            "chintsov": { password: "CYA", name: "Чинцов Ю. А.", companies: ["Палладиум"] },
+            "shepilov": { password: "SAN", name: "Шепилов А.Н.", companies: ["Палладиум"] }
         };
 
         const CATEGORIES_BY_COMPANY = {
-            "Кедресс": [
+            "Kedress": [
                 "Содержание ПК", "Вклады от собственников", "Прочая продажа неликвида", 
                 "Зарплата производственного персонала", "Зарплата охраны", "Зарплата административного персонала", 
                 "Содержание офиса", "Представительские расходы", "Обслуживание линии", 
                 "Оплаты по кредитам и займам", "Командировачные расходы", "Доставка", "Автомобиль", "Упаковка и тара"
             ],
-            "ПЛ ГРУПП": [
+            "Палладиум": [
                 "Услуга по перевозке", "Прочие поступления", "Транспортные услуги", "РКО", 
                 "Зарплата производственного персонала", "Зарплата водителей", "Зарплата административного персонала", 
                 "Зарплата коммерческого персонала", "Обучение персонала", "Расходы на персонал", 
@@ -58,13 +58,20 @@
         const GOOGLE_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyJdXBKq_CqyAKfEtDTirnyg_kWMX-bX3IQ1h8U6s5LyVpfKiNUUM3yGfA_QxTaE7Yw/exec";
 
         const LOGOS = {
-            "Кедресс": "https://i.yapx.ru/dPovS.png",
-            "ПЛ ГРУПП": "https://i.yapx.ru/dPLra.png"
+            "Kedress": "https://i.yapx.ru/dPovS.png",
+            "Палладиум": "https://i.yapx.ru/dPLra.png"
         };
 
         function App() {
+            const [currentUser, setCurrentUser] = useState(null);
+            
+            // Состояние формы авторизации
+            const [loginData, setLoginData] = useState({ login: '', password: '' });
+            const [loginError, setLoginError] = useState('');
+
+            // Состояние основной формы
             const [formData, setFormData] = useState({
-                company: 'Кедресс',
+                company: '',
                 employee: '',
                 type: 'Расход',
                 category: '',
@@ -80,13 +87,84 @@
             const [success, setSuccess] = useState(false);
             const [isLoading, setIsLoading] = useState(false);
 
+            // Проверка сохраненной сессии при загрузке страницы
+            useEffect(() => {
+                const savedUserKey = localStorage.getItem('cashAppUser');
+                if (savedUserKey && USERS[savedUserKey]) {
+                    const user = USERS[savedUserKey];
+                    setCurrentUser(user);
+                    
+                    // Восстанавливаем последнюю выбранную компанию или берем первую доступную
+                    const savedCompany = localStorage.getItem('cashAppCompany');
+                    const initialCompany = (savedCompany && user.companies.includes(savedCompany)) 
+                        ? savedCompany 
+                        : user.companies[0];
+
+                    setFormData(prev => ({
+                        ...prev,
+                        company: initialCompany,
+                        employee: user.name,
+                        category: ''
+                    }));
+                }
+            }, []);
+
+            // Обработка входа в систему
+            const handleLoginSubmit = (e) => {
+                e.preventDefault();
+                
+                if (!loginData.login) {
+                    setLoginError('Пожалуйста, выберите сотрудника из списка');
+                    return;
+                }
+
+                const loginKey = loginData.login;
+                const user = USERS[loginKey];
+
+                if (user && user.password === loginData.password) {
+                    setCurrentUser(user);
+                    setLoginError('');
+                    
+                    // Сохраняем логин в память браузера
+                    localStorage.setItem('cashAppUser', loginKey);
+                    
+                    const initialCompany = user.companies[0];
+                    localStorage.setItem('cashAppCompany', initialCompany);
+
+                    // Предзаполняем форму данными пользователя
+                    setFormData(prev => ({
+                        ...prev,
+                        company: initialCompany, // Выбираем первую доступную компанию по умолчанию
+                        employee: user.name,
+                        category: ''
+                    }));
+                } else {
+                    setLoginError('Неверный пароль');
+                }
+            };
+
+            const handleLogout = () => {
+                setCurrentUser(null);
+                
+                // Удаляем данные из памяти браузера при выходе
+                localStorage.removeItem('cashAppUser');
+                localStorage.removeItem('cashAppCompany');
+
+                setLoginData({ login: '', password: '' });
+                setFormData({
+                    company: '', employee: '', type: 'Расход', category: '',
+                    amount: '', comment: '', receiptName: '', receiptBase64: '', receiptType: ''
+                });
+            };
+
             const handleChange = (e) => {
                 const { name, value } = e.target;
                 setFormData(prev => {
                     const newData = { ...prev, [name]: value };
+                    // Сбрасываем только статью расходов, сотрудника больше не трогаем (он фиксированный)
                     if (name === 'company') {
                         newData.category = '';
-                        newData.employee = ''; // Сбрасываем сотрудника при смене компании
+                        localStorage.setItem('cashAppCompany', value); // Запоминаем выбранную компанию
                     }
                     return newData;
                 });
@@ -115,7 +193,7 @@
                 e.preventDefault();
                 
                 if (!formData.company) return setError('Выберите компанию');
-                if (!formData.employee) return setError('Выберите сотрудника');
+                if (!formData.employee) return setError('Проблема с определением сотрудника');
                 if (!formData.category) return setError('Выберите статью расходов');
                 if (!formData.amount || formData.amount <= 0) return setError('Введите корректную сумму');
                 if (!formData.comment.trim()) return setError('Комментарий обязателен для заполнения');
@@ -156,6 +234,7 @@
 
                     setTransactions([newTransaction, ...transactions]);
                     
+                    // Сбрасываем поля формы после успеха
                     setFormData(prev => ({
                         ...prev,
                         type: 'Расход',
@@ -179,10 +258,67 @@
                 }
             };
 
+            // Экран авторизации, если пользователь не вошел
+            if (!currentUser) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
+                        <div className="max-w-md w-full bg-white rounded-2xl shadow-md border border-slate-200 p-8">
+                            <div className="text-center mb-8">
+                                <h1 className="text-2xl font-bold text-slate-800">Авторизация</h1>
+                                <p className="text-slate-500 mt-2">Выберите себя в списке и введите пароль</p>
+                            </div>
+                            
+                            <form onSubmit={handleLoginSubmit} className="space-y-5">
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Сотрудник</label>
+                                    <select 
+                                        value={loginData.login}
+                                        onChange={(e) => setLoginData({...loginData, login: e.target.value})}
+                                        className="w-full p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                    >
+                                        <option value="" disabled>Выберите сотрудника...</option>
+                                        {Object.entries(USERS)
+                                            .sort((a, b) => a[1].name.localeCompare(b[1].name))
+                                            .map(([key, user]) => (
+                                                <option key={key} value={key}>{user.name}</option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold mb-1">Пароль</label>
+                                    <input 
+                                        type="password" 
+                                        value={loginData.password}
+                                        onChange={(e) => setLoginData({...loginData, password: e.target.value})}
+                                        className="w-full p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        placeholder="••••••"
+                                    />
+                                </div>
+
+                                {loginError && <div className="p-3 bg-red-50 text-red-600 border border-red-200 rounded-xl text-sm font-medium">{loginError}</div>}
+
+                                <button type="submit" className="w-full py-3.5 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl shadow-sm hover:shadow transition-all mt-4">
+                                    Войти
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                );
+            }
+
+            // Основной экран приложения (если авторизация пройдена)
             return (
-                <div className="min-h-screen p-4 md:p-8">
-                    <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
-                        
+                <div className="min-h-screen p-4 md:p-8 relative">
+                    {/* Кнопка выхода в правом верхнем углу */}
+                    <button 
+                        onClick={handleLogout}
+                        className="absolute top-4 right-4 md:top-8 md:right-8 bg-white border border-slate-300 text-slate-600 hover:bg-slate-100 px-4 py-2 rounded-lg text-sm font-semibold transition-colors shadow-sm"
+                    >
+                        Выйти из системы
+                    </button>
+
+                    <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8 mt-12 md:mt-0">
                         {/* Форма */}
                         <div className="lg:col-span-5 bg-white rounded-2xl shadow-sm border border-slate-200 p-6 md:p-8">
                             <div className="flex flex-col items-center mb-8">
@@ -194,24 +330,33 @@
                                     )}
                                 </div>
                                 <h2 className="text-xl font-bold text-slate-800">Учет наличных средств</h2>
-                                <p className="text-sm text-slate-500">Заполнение новой операции</p>
+                                <p className="text-sm text-slate-500">Сотрудник: {currentUser.name}</p>
                             </div>
 
                             <form onSubmit={handleSubmit} className="space-y-5">
                                 <div>
                                     <label className="block text-sm font-semibold mb-1">🏢 Компания <span className="text-red-500">*</span></label>
-                                    <select name="company" value={formData.company} onChange={handleChange} className="w-full p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                                        <option value="Кедресс">Кедресс</option>
-                                        <option value="ПЛ ГРУПП">ПЛ ГРУПП</option>
+                                    <select 
+                                        name="company" 
+                                        value={formData.company} 
+                                        onChange={handleChange} 
+                                        className="w-full p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                        disabled={currentUser.companies.length === 1} // Блокируем, если доступна только одна компания
+                                    >
+                                        {currentUser.companies.map(comp => (
+                                            <option key={comp} value={comp}>{comp}</option>
+                                        ))}
                                     </select>
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-semibold mb-1">👤 Сотрудник <span className="text-red-500">*</span></label>
-                                    <select name="employee" value={formData.employee} onChange={handleChange} className="w-full p-3 border border-slate-300 rounded-xl bg-white focus:ring-2 focus:ring-blue-500 outline-none">
-                                        <option value="" disabled>Выберите сотрудника...</option>
-                                        {EMPLOYEES_BY_COMPANY[formData.company]?.map(emp => <option key={emp} value={emp}>{emp}</option>)}
-                                    </select>
+                                    <label className="block text-sm font-semibold mb-1">👤 Сотрудник <span className="text-slate-400 font-normal">(заполняется автоматически)</span></label>
+                                    <input 
+                                        type="text" 
+                                        value={formData.employee} 
+                                        disabled
+                                        className="w-full p-3 border border-slate-200 rounded-xl bg-slate-50 text-slate-500 font-medium outline-none cursor-not-allowed"
+                                    />
                                 </div>
 
                                 <div>
@@ -269,17 +414,17 @@
                         {/* История */}
                         <div className="lg:col-span-7 bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden flex flex-col h-[800px]">
                             <div className="p-6 border-b border-slate-100 bg-slate-50/50">
-                                <h3 className="text-lg font-bold text-slate-800">🧾 Последние операции {formData.employee ? `(${formData.employee})` : ''}</h3>
+                                <h3 className="text-lg font-bold text-slate-800">🧾 Ваши последние операции</h3>
                             </div>
                             
                             <div className="flex-1 overflow-y-auto p-4 sm:p-6">
-                                {transactions.filter(t => t.employee === formData.employee).length === 0 ? (
+                                {transactions.filter(t => t.employee === currentUser.name).length === 0 ? (
                                     <div className="h-full flex flex-col items-center justify-center text-slate-400 text-center">
-                                        <p>{formData.employee ? 'Здесь будут отображаться добавленные сейчас записи' : 'Выберите сотрудника, чтобы увидеть его операции'}</p>
+                                        <p>Здесь будут отображаться ваши добавленные записи</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-4">
-                                        {transactions.filter(t => t.employee === formData.employee).map((t) => (
+                                        {transactions.filter(t => t.employee === currentUser.name).map((t) => (
                                             <div key={t.id} className="p-4 sm:p-5 border border-slate-100 rounded-xl bg-white shadow-sm">
                                                 <div className="flex justify-between items-start mb-3 gap-4">
                                                     <div className="flex items-center gap-3">
