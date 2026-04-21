@@ -173,7 +173,7 @@
                   sum: Math.abs(tx.amount), 
                   note: tx.comment, 
                   photoUrl: tx.photoUrl, 
-                  files: [] // При редактировании старые фото остаются в photoUrl, пока не выберут новые
+                  files: [] 
                 });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
                 setMsg({ text: 'Режим редактирования', type: 'err' });
@@ -240,7 +240,6 @@
                                     <span className="text-[10px] text-slate-400 font-black uppercase text-center">
                                         {form.files.length > 0 ? `📎 Выбрано фото: ${form.files.length}` : (form.photoUrl && form.photoUrl !== "Без фото" ? '📎 Фото сохранены (нажмите для замены)' : '📷 Прикрепить чеки (можно несколько)')}
                                     </span>
-                                    {/* Добавлен атрибут multiple для выбора нескольких фото */}
                                     <input type="file" multiple className="hidden" accept="image/*" onChange={handleFile} />
                                 </label>
                             </div>
@@ -272,7 +271,6 @@
                                             
                                             {tx.photoUrl && tx.photoUrl !== "Без фото" && (
                                                 <div className="flex flex-wrap gap-2 mt-2">
-                                                    {/* Логика отображения нескольких ссылок через запятую */}
                                                     {tx.photoUrl.split(',').map((url, idx) => (
                                                         <a key={idx} href={url.trim()} target="_blank" rel="noopener noreferrer" className="inline-block text-[9px] font-black text-blue-400 uppercase bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors">📎 Чек {idx + 1}</a>
                                                     ))}
