@@ -70,11 +70,8 @@
                     setUser(u);
                     const comp = localStorage.getItem('cash_comp') || u.companies[0];
                     setForm(f => ({ ...f, company: comp, employee: u.name }));
-                    
-                    // Моментальная загрузка ленты из памяти
                     const cache = localStorage.getItem(`hist_${saved}`);
                     if (cache) setHistory(JSON.parse(cache));
-                    // Запрос свежих данных из таблицы в фоне
                     loadHistory(saved, u.name);
                 }
                 setIsLoading(false);
@@ -107,7 +104,10 @@
             const handleFile = async (e) => {
                 const selectedFiles = Array.from(e.target.files);
                 if (selectedFiles.length === 0) return;
-
+                
+                setMsg({ text: 'Обработка фото...', type: 'ok' });
+                
+                // Обработка нескольких файлов параллельно
                 const filePromises = selectedFiles.map(f => {
                     return new Promise((resolve) => {
                         const r = new FileReader();
@@ -122,11 +122,12 @@
 
                 const processedFiles = await Promise.all(filePromises);
                 setForm(prev => ({ ...prev, files: processedFiles }));
+                setMsg({ text: '', type: '' });
             };
 
             const onSubmit = async (e) => {
                 e.preventDefault();
-                if (!form.cat || !form.sum || !form.note.trim()) return setMsg({ text: 'Заполните все обязательные поля', type: 'err' });
+                if (!form.cat || !form.sum || !form.note.trim()) return setMsg({ text: 'Заполните все поля', type: 'err' });
                 
                 setIsSubmitting(true);
                 setMsg({ text: '', type: '' });
@@ -138,39 +139,58 @@
                     category: form.cat,
                     paymentMethod: form.pay,
                     comment: form.note,
-                    files: form.files
+                    files: form.files // Отправляем весь массив файлов
                 };
 
                 try {
-                    await fetch(GOOGLE_SCRIPT_URL, { method: 'POST', body: JSON.stringify(payload) });
-                    setMsg({ text: 'Данные успешно сохранены!', type: 'ok' });
-                    setForm(f => ({ ...f, id: null, sum: '', note: '', cat: '', files: [], photoUrl: '', date: getToday() }));
-                    // Обновляем ленту после отправки
-                    loadHistory(localStorage.getItem('cash_user'), user.name);
-                } catch (err) { setMsg({ text: 'Ошибка отправки: проверьте интернет', type: 'err' }); }
+                    const response = await fetch(GOOGLE_SCRIPT_URL, { 
+                      method: 'POST', 
+                      body: JSON.stringify(payload) 
+                    });
+                    
+                    if (response.ok) {
+                      setMsg({ text: 'Данные успешно сохранены!', type: 'ok' });
+                      setForm(f => ({ ...f, id: null, sum: '', note: '', cat: '', files: [], photoUrl: '', date: getToday() }));
+                      loadHistory(localStorage.getItem('cash_user'), user.name);
+                    } else {
+                      throw new Error('Server error');
+                    }
+                } catch (err) { 
+                  setMsg({ text: 'Ошибка отправки: проверьте интернет', type: 'err' }); 
+                }
                 setIsSubmitting(false);
             };
 
             const edit = (tx) => {
                 const [d, m, y] = tx.date.split('.');
-                setForm({ ...form, id: tx.id, date: `20${y}-${m}-${d}`, type: tx.amount < 0 ? 'Расход' : 'Приход', pay: tx.paymentMethod, cat: tx.category, sum: Math.abs(tx.amount), note: tx.comment, photoUrl: tx.photoUrl, files: [] });
+                setForm({ 
+                  ...form, 
+                  id: tx.id, 
+                  date: `20${y}-${m}-${d}`, 
+                  type: tx.amount < 0 ? 'Расход' : 'Приход', 
+                  pay: tx.paymentMethod, 
+                  cat: tx.category, 
+                  sum: Math.abs(tx.amount), 
+                  note: tx.comment, 
+                  photoUrl: tx.photoUrl, 
+                  files: [] // При редактировании старые фото остаются в photoUrl, пока не выберут новые
+                });
                 window.scrollTo({ top: 0, behavior: 'smooth' });
-                setMsg({ text: 'Режим редактирования. Внесите изменения и нажмите кнопку.', type: 'err' });
+                setMsg({ text: 'Режим редактирования', type: 'err' });
             };
 
-            if (isLoading) return <div className="h-screen flex items-center justify-center font-bold text-slate-300 loading-pulse uppercase tracking-widest">Загрузка...</div>;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-bold text-slate-300 loading-pulse uppercase">Загрузка...</div>;
 
             if (!user) return (
                 <div className="min-h-screen flex items-center justify-center p-6">
                     <div className="w-full max-w-sm bg-white p-8 rounded-3xl shadow-xl border border-slate-100">
-                        <h1 className="text-2xl font-black text-center mb-8 uppercase tracking-tighter">Учет Наличных</h1>
+                        <h1 className="text-2xl font-black text-center mb-8 uppercase tracking-tighter">Вход в систему</h1>
                         <form onSubmit={handleLogin} className="space-y-4">
                             <select className="w-full p-4 border rounded-2xl outline-none bg-slate-50 font-bold" onChange={e => setLogin({...login, id: e.target.value})}>
                                 <option value="">Сотрудник...</option>
                                 {Object.entries(USERS).map(([k,v]) => <option key={k} value={k}>{v.name}</option>)}
                             </select>
                             <input type="password" placeholder="Пароль" className="w-full p-4 border rounded-2xl outline-none bg-slate-50" onChange={e => setLogin({...login, pass: e.target.value})} />
-                            {msg.text && <p className="text-red-500 text-xs font-bold text-center uppercase">{msg.text}</p>}
                             <button className="w-full py-4 bg-blue-600 text-white font-black rounded-2xl shadow-lg uppercase tracking-widest text-sm">Войти</button>
                         </form>
                     </div>
@@ -182,10 +202,7 @@
                     <div className="flex justify-between items-center mb-8">
                         <div className="flex items-center gap-4">
                             <div className="bg-white p-1 rounded-xl shadow-sm border h-14 w-14 flex items-center justify-center"><img src={LOGOS[form.company]} className="max-h-full object-contain" /></div>
-                            <div>
-                                <h1 className="text-xl font-black uppercase leading-none">Касса</h1>
-                                <p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest">{user.name}</p>
-                            </div>
+                            <div><h1 className="text-xl font-black uppercase leading-none">Касса</h1><p className="text-[10px] text-slate-400 font-black uppercase mt-1 tracking-widest">{user.name}</p></div>
                         </div>
                         <button onClick={() => { localStorage.clear(); location.reload(); }} className="text-[10px] font-black text-slate-300 hover:text-red-500 uppercase tracking-widest">Выход</button>
                     </div>
@@ -217,32 +234,33 @@
                                     <input type="number" value={form.sum} onChange={e => setForm({...form, sum: e.target.value})} placeholder="0.00" className="w-full p-3 border border-slate-100 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 font-black text-xl" />
                                     <span className="absolute right-4 top-3.5 font-black text-slate-200 text-xl">₽</span>
                                 </div>
-                                <textarea value={form.note} onChange={e => setForm({...form, note: e.target.value})} placeholder="Комментарий (назначение платежа)..." className="w-full p-3 border border-slate-100 rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"></textarea>
+                                <textarea value={form.note} onChange={e => setForm({...form, note: e.target.value})} placeholder="Комментарий..." className="w-full p-3 border border-slate-100 rounded-xl h-24 outline-none focus:ring-2 focus:ring-blue-500 text-sm font-medium"></textarea>
                                 
                                 <label className="flex items-center justify-center p-4 border-2 border-dashed border-slate-100 rounded-2xl cursor-pointer hover:bg-slate-50 transition-all">
-                                    <span className="text-[10px] text-slate-400 font-black uppercase">
-                                        {form.files && form.files.length > 0 ? `📎 Выбрано фото: ${form.files.length}` : (form.photoUrl && form.photoUrl !== "Без фото" ? '📎 Фото сохранено' : '📷 Выбрать фото')}
+                                    <span className="text-[10px] text-slate-400 font-black uppercase text-center">
+                                        {form.files.length > 0 ? `📎 Выбрано фото: ${form.files.length}` : (form.photoUrl && form.photoUrl !== "Без фото" ? '📎 Фото сохранены (нажмите для замены)' : '📷 Прикрепить чеки (можно несколько)')}
                                     </span>
+                                    {/* Добавлен атрибут multiple для выбора нескольких фото */}
                                     <input type="file" multiple className="hidden" accept="image/*" onChange={handleFile} />
                                 </label>
                             </div>
 
                             {msg.text && <p className={`text-[10px] font-black uppercase text-center p-2 rounded-lg ${msg.type==='ok'?'text-green-600 bg-green-50':'text-amber-600 bg-amber-50'}`}>{msg.text}</p>}
 
-                            <button disabled={isSubmitting} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all disabled:opacity-50 shadow-xl text-lg tracking-tighter">
-                                {isSubmitting ? 'ЗАГРУЗКА...' : (form.id ? 'ОБНОВИТЬ ЗАПИСЬ' : 'СОХРАНИТЬ')}
+                            <button disabled={isSubmitting} className="w-full py-4 bg-slate-900 text-white font-black rounded-2xl hover:bg-black transition-all disabled:opacity-50 shadow-xl text-lg tracking-tighter uppercase">
+                                {isSubmitting ? 'Загрузка...' : (form.id ? 'Обновить данные' : 'Записать в таблицу')}
                             </button>
                         </form>
 
                         <div className="lg:col-span-7 space-y-4">
                             <div className="flex justify-between items-center px-1">
                                 <h2 className="font-black text-[10px] text-slate-300 uppercase tracking-widest">Лента за месяц</h2>
-                                {isSyncing && <div className="text-[9px] font-black text-blue-400 loading-pulse uppercase tracking-widest">Синхронизация...</div>}
+                                {isSyncing && <div className="text-[9px] font-black text-blue-400 loading-pulse uppercase">Синхронизация...</div>}
                             </div>
                             <div className="space-y-4 max-h-[800px] overflow-y-auto pr-2 custom-scrollbar">
                                 {history.map(tx => (
-                                    <div key={tx.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-start hover:border-blue-200 transition-all group">
-                                        <div className="space-y-1">
+                                    <div key={tx.id} className="bg-white p-5 rounded-[24px] border border-slate-100 shadow-sm flex justify-between items-start hover:border-blue-200 transition-all">
+                                        <div className="space-y-1 w-full">
                                             <div className="flex items-center gap-2 mb-1">
                                                 <span className={`text-[8px] font-black px-2 py-0.5 rounded uppercase ${tx.amount < 0 ? 'bg-red-50 text-red-500' : 'bg-green-50 text-green-500'}`}>{tx.amount < 0 ? 'Расход' : 'Приход'}</span>
                                                 <span className="text-[8px] font-black text-slate-400">{tx.date}</span>
@@ -250,24 +268,23 @@
                                             </div>
                                             <p className="font-black text-slate-800 text-2xl tracking-tighter">{Math.abs(tx.amount).toLocaleString('ru-RU')} ₽</p>
                                             <p className="text-[10px] font-bold text-slate-400 uppercase">{tx.category}</p>
-                                            <div className="bg-slate-50 p-3 rounded-xl mt-3 border-l-4 border-slate-200"><p className="text-[13px] text-slate-600 italic font-medium leading-relaxed">"{tx.comment}"</p></div>
+                                            <div className="bg-slate-50 p-3 rounded-xl mt-3 border-l-4 border-slate-200"><p className="text-[13px] text-slate-600 italic font-medium">"{tx.comment}"</p></div>
                                             
                                             {tx.photoUrl && tx.photoUrl !== "Без фото" && (
                                                 <div className="flex flex-wrap gap-2 mt-2">
+                                                    {/* Логика отображения нескольких ссылок через запятую */}
                                                     {tx.photoUrl.split(',').map((url, idx) => (
-                                                        <a key={idx} href={url.trim()} target="_blank" className="inline-block text-[9px] font-black text-blue-400 uppercase tracking-widest">
-                                                            📎 Чек {idx + 1}
-                                                        </a>
+                                                        <a key={idx} href={url.trim()} target="_blank" rel="noopener noreferrer" className="inline-block text-[9px] font-black text-blue-400 uppercase bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-colors">📎 Чек {idx + 1}</a>
                                                     ))}
                                                 </div>
                                             )}
                                         </div>
-                                        <button onClick={() => edit(tx)} className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded-2xl transition-all shadow-sm" title="Исправить">
+                                        <button onClick={() => edit(tx)} className="p-3 bg-slate-50 hover:bg-blue-50 text-slate-400 hover:text-blue-500 rounded-2xl transition-all shadow-sm ml-2">
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3"><path d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                         </button>
                                     </div>
                                 ))}
-                                {history.length === 0 && !isSyncing && <div className="text-center py-20 text-slate-200 font-bold uppercase text-xs tracking-widest">Записей пока нет</div>}
+                                {history.length === 0 && !isSyncing && <div className="text-center py-20 text-slate-200 font-bold uppercase text-xs">Записей нет</div>}
                             </div>
                         </div>
                     </div>
